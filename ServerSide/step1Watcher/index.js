@@ -7,6 +7,7 @@ const Express = require('express');
 const fs = require('fs');
 const cors = require('cors');
 const chokidar = require('chokidar');
+const pino = require('pino')(require('pino-pretty')());
 
 const readyToProcess = false;
 
@@ -25,7 +26,7 @@ const initializeForProcessing = async (clientName) => {
 
   watcher.on('all', async (event, path) => {
 
-    console.log(`${path} triggered ${event}`)
+    pino.info(`${path} triggered ${event}`)
   })
 
   readyToProcess = true;
@@ -41,7 +42,7 @@ const initializeForProcessing = async (clientName) => {
 
     app.post('/initialize', async (req, res) => {
 
-      console.log(`Enter "/initialize" post route`);
+      pino.info(`Enter "/initialize" post route`);
       try {
 
         await initializeForProcessing(req.body.clientName || '');
@@ -53,7 +54,7 @@ const initializeForProcessing = async (clientName) => {
         })
       } catch (x) {
 
-        console.log(`Error in "/initialize" post route: ${x.message}`);
+        pino.info(`Error in "/initialize" post route: ${x.message}`);
         res.json({
 
           success: false,
@@ -61,11 +62,11 @@ const initializeForProcessing = async (clientName) => {
         });
       } finally {
 
-        console.log(`Exit "/initialize" post route`);
+        pino.info(`Exit "/initialize" post route`);
       }
     })
   } catch (x) {
 
-    console.log(`Error in Watcher: ${x.message}`);
+    pino.info(`Error in Watcher: ${x.message}`);
   }
 })();
