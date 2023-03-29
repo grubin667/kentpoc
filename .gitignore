@@ -1,2 +1,4 @@
 # Outer level
 node_modules/
+newAudios/
+processedAudios/

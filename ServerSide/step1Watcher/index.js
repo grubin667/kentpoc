@@ -7,15 +7,17 @@ const Express = require('express');
 const fs = require('fs');
 const cors = require('cors');
 const chokidar = require('chokidar');
-const pino = require('pino')(require('pino-pretty')());
+const pino = require('pino')();
 
-const readyToProcess = false;
+const port = 8201;
+let readyToProcess = false;
 
 const initializeForProcessing = async (clientName) => {
 
-  // Not sure yet how this is going to work eventually. For now, if clientName.length === 0,
-  // we will work in /ServerSide/clients/noname. Otherwise, we will work in /ServerSide/clients/${clientName}.
-  const watcher = chokidar.watch(`../clients/${clientName.length === 0 ? 'noname' : clientName}`, {
+  // Not sure yet how this is going to work eventually.
+  // For now, if clientName.length === 0, we will place new files into /ServerSide/clients/noname/newAudios.
+  // Otherwise, we will work in /ServerSide/clients/${clientName}/newAudios.
+  const watcher = chokidar.watch(`../clients/${clientName.length === 0 ? 'noname' : clientName}/newAudios`, {
     interval: 2500,
     binaryInterval: 2000,
     awaitWriteFinish: {
@@ -64,6 +66,12 @@ const initializeForProcessing = async (clientName) => {
 
         pino.info(`Exit "/initialize" post route`);
       }
+    })
+
+    app.listen(port, () => {
+
+      console.log(`console: Watcher listening on port ${port}`);
+      pino.info(`pino: Watcher listening on port ${port}`);
     })
   } catch (x) {
 
