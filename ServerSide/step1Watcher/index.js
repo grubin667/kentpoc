@@ -11,28 +11,77 @@ const pino = require('pino')();
 
 const port = 8201;
 let readyToProcess = false;
+let watcher = null
+let activeClients = []
 
-const initializeForProcessing = async (clientName) => {
+const initializeWatcher = () => {
 
-  // Not sure yet how this is going to work eventually.
-  // For now, if clientName.length === 0, we will place new files into /ServerSide/clients/noname/newAudios.
-  // Otherwise, we will work in /ServerSide/clients/${clientName}/newAudios.
-  const watcher = chokidar.watch(`../clients/${clientName.length === 0 ? 'noname' : clientName}/newAudios`, {
-    interval: 2500,
-    binaryInterval: 2000,
+  watcher = chokidar.watch([], {
+
+    alwaysStat: true,
     awaitWriteFinish: {
       stabilityThreshold: 2000,
       pollInterval: 100
-    }
+    },
+    cwd: '../clients',
+    depth: 1,
+    disableGlobbing: true,
+    ignoreInitial: false,
+    ignorePermissionErrors: true,
   })
 
-  watcher.on('all', async (event, path) => {
+  watcher.on('add', (path, stats) => {
 
-    pino.info(`${path} triggered ${event}`)
+    pino.info(`"add" event for "${path}"`);
+    triggerWhisper(path)
   })
 
   readyToProcess = true;
 }
+
+const addClientDir = (clientName) => {
+
+  // pino.info('-------------------------------------------');
+  // pino.info(`Adding ${clientName}/new`)
+  watcher.add(`${clientName}/new`);
+  activeClients.push(`${clientName}/new`);
+  // pino.info(`Now watching ${JSON.stringify(watcher.getWatched())}`)
+  // pino.info(`activeClients: ${JSON.stringify(activeClients)}`)
+}
+
+const removeClientDir = (clientName) => {
+  
+  // pino.info('-------------------------------------------');
+  // pino.info(`Removing ${clientName}/new`)
+  watcher.unwatch(`${clientName}/new`);
+  activeClients = activeClients.filter(x => x != `${clientName}/new`)
+  // pino.info(`Now watching ${JSON.stringify(watcher.getWatched())}`)
+  // pino.info(`activeClients: ${JSON.stringify(activeClients)}`)
+}
+
+const triggerWhisper = (path) => {
+
+  pino.info('In triggerWhisper');
+  // pino.info('Start Whisper');
+  // pino.info('Move new input file to processed');
+}
+
+  // Not sure yet how this is going to work eventually, but for now....
+  //
+  // There is a settings.json file in ../clients/${clientName}. It takes the place
+  // of using a database (at least for now). It has this format:
+  /*
+    {
+      version: 110,
+      clientName: 'XYZ Hospital Corp.',
+      good_words: [],
+      bad_words: [],
+    }
+  */
+  // We will start a file watcher in ../clients/${clientName}/new.
+  //
+
+
 
 (async () => {
 
@@ -42,21 +91,24 @@ const initializeForProcessing = async (clientName) => {
     app.use(cors());
     app.use(Express.json());
 
-    app.post('/initialize', async (req, res) => {
+    initializeWatcher();
 
-      pino.info(`Enter "/initialize" post route`);
+    app.post('/addClientDir', async (req, res) => {
+
+      pino.info(`req.query = ${JSON.stringify(req.query)}`)
+      pino.info(`Enter "/addClientDir" post route for ${req.query.clientName}`);
       try {
 
-        await initializeForProcessing(req.body.clientName || '');
+        addClientDir(req.query.clientName);
 
         res.json({
 
           success: true,
-          payload: {initialized: readyToProcess}
+          payload: {added: req.query.clientName}
         })
       } catch (x) {
 
-        pino.info(`Error in "/initialize" post route: ${x.message}`);
+        pino.info(`Error in "/addClientDir" post route: ${x.message}`);
         res.json({
 
           success: false,
@@ -64,13 +116,38 @@ const initializeForProcessing = async (clientName) => {
         });
       } finally {
 
-        pino.info(`Exit "/initialize" post route`);
+        pino.info(`Exit "/addClientDir" post route`);
+      }
+    })
+
+    app.post('/removeClientDir', async (req, res) => {
+
+      pino.info(`Enter "/removeClientDir" post route for ${req.body.clientName}`);
+      try {
+
+        removeClientDir(req.body.clientName);
+
+        res.json({
+
+          success: true,
+          payload: {removed: req.body.clientName}
+        })
+      } catch (x) {
+
+        pino.info(`Error in "/removeClientDir" post route: ${x.message}`);
+        res.json({
+
+          success: false,
+          payload: x.message
+        });
+      } finally {
+
+        pino.info(`Exit "/removeClientDir" post route`);
       }
     })
 
     app.listen(port, () => {
 
-      console.log(`console: Watcher listening on port ${port}`);
       pino.info(`pino: Watcher listening on port ${port}`);
     })
   } catch (x) {
