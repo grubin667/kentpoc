@@ -2,12 +2,23 @@
 // step1Watcher
 //
 
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+
 const path = require('path');
 const Express = require('express');
 const fs = require('fs');
 const cors = require('cors');
+
 const chokidar = require('chokidar');
 const pino = require('pino')();
+
+import { Configuration, OpenAIApi } from "openai";
+
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_SECRET,
+});
+const openai = new OpenAIApi(configuration);
 
 const port = 8201;
 let readyToProcess = false;
@@ -18,7 +29,7 @@ const initializeWatcher = () => {
 
   watcher = chokidar.watch([], {
 
-    alwaysStat: true,
+    alwaysStat: false,
     awaitWriteFinish: {
       stabilityThreshold: 2000,
       pollInterval: 100
@@ -28,12 +39,26 @@ const initializeWatcher = () => {
     disableGlobbing: true,
     ignoreInitial: false,
     ignorePermissionErrors: true,
+    persistent: true,
   })
 
   watcher.on('add', (path, stats) => {
 
-    pino.info(`"add" event for "${path}"`);
-    triggerWhisper(path)
+    // path is of the form ${client}/new/filename.ext, because we're using option cwd.
+    // We process only extensions mp3, mp4, mpeg, mpga, m4a, wav, and webm.
+    const goodextensions = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm']
+    // pino.info(`"add" event for "${path}"`);
+    const re = /^(.+)\/new\/(.+)\.(.+)$/gm;
+    const splitstring = path.split(re)
+    const clientName = splitstring[0]
+    const filename = splitstring[2]
+    const ext = splitstring[3]
+    if (!goodextensions.includes(ext)) {
+      // invalid extension - skipping it
+      pino.error(`Skipping ${path}. It has non-audio extension`)
+    } else {
+      triggerWhisper(path, clientName, filename, ext)
+    }
   })
 
   readyToProcess = true;
@@ -59,11 +84,36 @@ const removeClientDir = (clientName) => {
   // pino.info(`activeClients: ${JSON.stringify(activeClients)}`)
 }
 
-const triggerWhisper = (path) => {
+const triggerWhisper = async (fpath, clientName, filename, ext) => {
 
-  pino.info('In triggerWhisper');
-  // pino.info('Start Whisper');
-  // pino.info('Move new input file to processed');
+  // Start Whisper
+  // Move input file to processed
+  let audioFile = null
+  pino.info(`In triggerWhisper for ${fpath}`);
+  try {
+
+    audioFile = fs.readFileSync(path.resolve('../clients', fpath),
+    {encoding: 'base64', flag: 'r'})
+  } catch(error) {
+
+    pino.error(`Error received reading ${fpath}: ${error.message}`)
+  }
+  
+  if (audioFile) {
+
+    try {
+
+      const response = await openai.createTranscription({
+
+        model: "whisper", // "large-v2", "whisper-1",
+        file: audioFile,
+      })
+      pino.info(`Got back ${JSON.stringify(response)}`)
+    } catch(error) {
+
+      pino.error(`Error from openai: ${error.message}`)
+    }
+  }
 }
 
   // Not sure yet how this is going to work eventually, but for now....

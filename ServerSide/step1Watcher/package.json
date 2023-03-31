@@ -7,13 +7,15 @@
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "type": "module",
   "keywords": [],
-  "author": "",
+  "author": "Jerry Rubin",
   "license": "ISC",
   "dependencies": {
     "chokidar": "^3.5.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
+    "openai": "^3.2.1",
     "pino": "^8.11.0"
   }
 }
