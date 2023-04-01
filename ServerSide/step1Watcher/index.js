@@ -15,8 +15,10 @@ const pino = require('pino')();
 
 import { Configuration, OpenAIApi } from "openai";
 
+const apiKey = "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"; // process.env.OPENAI_SECRET
+
 const configuration = new Configuration({
-  apiKey: process.env.OPENAI_SECRET,
+  apiKey: apiKey,
 });
 const openai = new OpenAIApi(configuration);
 
@@ -92,8 +94,7 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
   pino.info(`In triggerWhisper for ${fpath}`);
   try {
 
-    audioFile = fs.readFileSync(path.resolve('../clients', fpath),
-    {encoding: 'base64', flag: 'r'})
+    audioFile = fs.createReadStream(path.resolve('../clients', fpath))
   } catch(error) {
 
     pino.error(`Error received reading ${fpath}: ${error.message}`)
@@ -103,12 +104,12 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
 
     try {
 
-      const response = await openai.createTranscription({
+      const response = await openai.createTranscription(
 
-        model: "whisper", // "large-v2", "whisper-1",
-        file: audioFile,
-      })
-      pino.info(`Got back ${JSON.stringify(response)}`)
+        audioFile,
+        "whisper-1"
+      )
+      pino.info(`Got back "${response.data.text}"`)
     } catch(error) {
 
       pino.error(`Error from openai: ${error.message}`)
