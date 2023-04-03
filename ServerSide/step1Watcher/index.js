@@ -4,7 +4,7 @@
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-
+require('dotenv').config();
 const path = require('path');
 const Express = require('express');
 const fs = require('fs');
@@ -15,7 +15,7 @@ const pino = require('pino')();
 
 import { Configuration, OpenAIApi } from "openai";
 
-const apiKey = "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"; // process.env.OPENAI_SECRET
+const apiKey = process.env.OPENAI_SECRET;
 
 const configuration = new Configuration({
   apiKey: apiKey,
@@ -88,8 +88,8 @@ const removeClientDir = (clientName) => {
 
 const triggerWhisper = async (fpath, clientName, filename, ext) => {
 
-  // Start Whisper
-  // Move input file to processed
+  // Start Whisper processing of file at fpath.
+  // When complete, move input file to clients/${clientName}/processed.
   let audioFile = null
   pino.info(`In triggerWhisper for ${fpath}`);
   try {
@@ -109,7 +109,7 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
         audioFile,
         "whisper-1"
       )
-      pino.info(`Got back "${response.data.text}"`)
+      pino.info(`Got back "${response.data.text}. Will score, etc."`)
     } catch(error) {
 
       pino.error(`Error from openai: ${error.message}`)
@@ -131,8 +131,6 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
   */
   // We will start a file watcher in ../clients/${clientName}/new.
   //
-
-
 
 (async () => {
 

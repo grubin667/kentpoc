@@ -1,10 +1,5 @@
-# Outer level
 node_modules/
-newAudios/
+ServerSide/clients/**/new
+ServerSide/clients/**/processed
 processedAudios/
-
-*.txt
-*.m4a
-*.mp4
-*.mp3
-*.wav
+.env
