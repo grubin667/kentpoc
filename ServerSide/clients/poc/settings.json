@@ -1,6 +1,7 @@
 {
   "version": 110,
   "clientName": "P.O.C.",
-  "good_words": [],
-  "bad_words": []
+  "email": "joe@poc.com",
+  "good_words": ["hello","chicken","reason"],
+  "bad_words": ["idiot","dummy"]
 }
