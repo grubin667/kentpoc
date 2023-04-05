@@ -107,7 +107,7 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
   // Send file at fpath to Whisper.
   // When complete, move input file to clients/${clientName}/processed.
   let audioFile = null
-  pino.info(`In triggerWhisper for ${fpath}`);
+  // pino.info(`In triggerWhisper for ${fpath}`);
   try {
 
     audioFile = fs.createReadStream(path.resolve('../clients', fpath))
@@ -127,7 +127,7 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
       )
       if (response.data.text.length) {
         
-        pino.info(`Got non-empty response back from Whisper."`)
+        // pino.info(`Got non-empty response back from Whisper."`)
         triggerScoring(fpath, clientName, response.data.text)
       } else {
         
@@ -140,13 +140,20 @@ const triggerWhisper = async (fpath, clientName, filename, ext) => {
   }
 }
 
+const removePunctuation = (text) => {
+
+  var punctuation = /[\.,?!]/g;
+  var newText = text.replace(punctuation, "");
+  return newText;
+}
+
 const triggerScoring = async (fpath, clientName, recog) => {
 
   const settings = activeClients[clientName]
   const good_words = settings.good_words;
   const bad_words = settings.bad_words;
   const space = " ";
-  const rwords = recog.split(space); // need to strip attached punctuation
+  const rwords = removePunctuation(recog).split(space); // need to strip attached punctuation
 
   let good_score = 0;
   let bad_score = 0;
@@ -157,26 +164,12 @@ const triggerScoring = async (fpath, clientName, recog) => {
     if (bad_words.includes(word)) bad_score++
   }
 
-  pino.info(`Good: ${good_score}    Bad: ${bad_score}`)
+  pino.info(`goods add 1. bads subtract 0.5.`)
+  const score = good_score - (bad_score / 2);
+  pino.info(`Good: ${good_score}    Bad: ${bad_score}    Score: ${score}`)
 }
 
-
-  // Not sure yet how this is going to work eventually, but for now....
-  //
-  // There is a settings.json file in ../clients/${clientName}. It takes the place
-  // of using a database (at least for now). It has this format:
-  /*
-    {
-      version: 110,
-      clientName: 'XYZ Hospital Corp.',
-      good_words: [],
-      bad_words: [],
-    }
-  */
-  // We will start a file watcher in ../clients/${clientName}/new.
-  //
-
-(async () => {
+ (async () => {
 
   try {
 
@@ -188,8 +181,8 @@ const triggerScoring = async (fpath, clientName, recog) => {
 
     app.post('/addClientDir', async (req, res) => {
 
-      pino.info(`req.query = ${JSON.stringify(req.query)}`)
-      pino.info(`Enter "/addClientDir" post route for ${req.query.clientName}`);
+      // pino.info(`req.query = ${JSON.stringify(req.query)}`)
+      // pino.info(`Enter "/addClientDir" post route for ${req.query.clientName}`);
       try {
 
         addClientDir(req.query.clientName);
@@ -209,13 +202,13 @@ const triggerScoring = async (fpath, clientName, recog) => {
         });
       } finally {
 
-        pino.info(`Exit "/addClientDir" post route`);
+        // pino.info(`Exit "/addClientDir" post route`);
       }
     })
 
     app.post('/removeClientDir', async (req, res) => {
 
-      pino.info(`Enter "/removeClientDir" post route for ${req.body.clientName}`);
+      // pino.info(`Enter "/removeClientDir" post route for ${req.body.clientName}`);
       try {
 
         removeClientDir(req.body.clientName);
@@ -235,7 +228,7 @@ const triggerScoring = async (fpath, clientName, recog) => {
         });
       } finally {
 
-        pino.info(`Exit "/removeClientDir" post route`);
+        // pino.info(`Exit "/removeClientDir" post route`);
       }
     })
 
