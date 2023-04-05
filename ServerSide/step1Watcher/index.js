@@ -8,8 +8,10 @@ require('dotenv').config();
 const path = require('path');
 const Express = require('express');
 const fs = require('fs');
+const exec = require('child_process').exec;
 const cors = require('cors');
 
+const cron = require('node-cron');
 const chokidar = require('chokidar');
 const pino = require('pino')();
 
@@ -33,6 +35,56 @@ let watcher = null
 //    active, that state must survive restarts, etc. until a message to /removeClientDir?clientName
 //    is received.
 let activeClients = []
+
+const initializeCronJob = () => {
+
+  // We start the cron job to check Files.com for any incoming work whether or not
+  // any clients are active. The task will run every 10 minutes (eventually), but every 1 minute
+  // to start.
+  let cronStage = 0
+  pino.info(`Starting cron job`)
+  const task = cron.schedule('* * * * *', () => {
+
+    if (activeClients.length === 0) {
+
+      pino.info(`cron has hit, but no clients are active yet - so nothing to do`)
+    } else {
+
+      pino.info(`cron has hit - looking for files`)
+      let continueRunning = true;
+      try {
+
+        task.stop();
+
+        // See if there are any files waiting for us at files.com.
+        // Grab them and copy (move?) them into clients/${clientName}/new where
+        // they'll be picked up by chokidar.
+        let filesComCommand = ``
+        if (cronStage === 0) {
+
+          filesComCommand = `"files-cli config set --subdomain independentcall --username jerry@rubintech.com"`
+        }
+        exec(filesComCommand, {}, (error, stdout, stderr) => {
+
+          if (error) {
+
+            continueRunning = false;
+            throw error;
+          }
+        })
+      } catch (x) {
+
+        pino.error(`Error in cron loop: ${x.message}. We've stopped looking.`)
+      } finally {
+
+        if (continueRunning) {
+
+          task.start();
+        }
+      }
+    }
+  })
+}
 
 const initializeWatcher = () => {
 
@@ -84,7 +136,7 @@ const addClientDir = (clientName) => {
   watcher.add(`${clientName}/new`);
 
   // Read client's settings.json.
-  const settings = fs.readFileSync(path.resolve('../clients', clientName, 'settings.json'), { encoding: 'utf8', flag: 'r'});
+  const settings = fs.readFileSync(path.resolve('../clients', clientName, 'settings.json'), { encoding: 'utf8', flag: 'r' });
 
   activeClients[clientName] = JSON.parse(settings);
 
@@ -93,58 +145,13 @@ const addClientDir = (clientName) => {
 }
 
 const removeClientDir = (clientName) => {
-  
+
   // pino.info('-------------------------------------------');
   // pino.info(`Removing ${clientName}/new`)
   watcher.unwatch(`${clientName}/new`);
   activeClients = activeClients.filter(x => x != `${clientName}/new`)
   // pino.info(`Now watching ${JSON.stringify(watcher.getWatched())}`)
   // pino.info(`activeClients: ${JSON.stringify(activeClients)}`)
-}
-
-const triggerWhisper = async (fpath, clientName, filename, ext) => {
-
-  // Send file at fpath to Whisper.
-  // When complete, move input file to clients/${clientName}/processed.
-  let audioFile = null
-  // pino.info(`In triggerWhisper for ${fpath}`);
-  try {
-
-    audioFile = fs.createReadStream(path.resolve('../clients', fpath))
-  } catch(error) {
-
-    pino.error(`Error received reading ${fpath}: ${error.message}`)
-  }
-  
-  if (audioFile) {
-
-    try {
-
-      const response = await openai.createTranscription(
-
-        audioFile,
-        "whisper-1"
-      )
-      if (response.data.text.length) {
-        
-        // pino.info(`Got non-empty response back from Whisper."`)
-        triggerScoring(fpath, clientName, response.data.text)
-      } else {
-        
-        pino.info(`Got back zero-length output from Whisper.`)
-      }
-    } catch(error) {
-
-      pino.error(`Error from openai (Whisper): ${error.message}`)
-    }
-  }
-}
-
-const removePunctuation = (text) => {
-
-  var punctuation = /[\.,?!]/g;
-  var newText = text.replace(punctuation, "");
-  return newText;
 }
 
 const triggerScoring = async (fpath, clientName, recog) => {
@@ -169,7 +176,52 @@ const triggerScoring = async (fpath, clientName, recog) => {
   pino.info(`Good: ${good_score}    Bad: ${bad_score}    Score: ${score}`)
 }
 
- (async () => {
+const triggerWhisper = async (fpath, clientName, filename, ext) => {
+
+  // Send file at fpath to Whisper.
+  // When complete, move input file to clients/${clientName}/processed.
+  let audioFile = null
+  // pino.info(`In triggerWhisper for ${fpath}`);
+  try {
+
+    audioFile = fs.createReadStream(path.resolve('../clients', fpath))
+  } catch (error) {
+
+    pino.error(`Error received reading ${fpath}: ${error.message}`)
+  }
+
+  if (audioFile) {
+
+    try {
+
+      const response = await openai.createTranscription(
+
+        audioFile,
+        "whisper-1"
+      )
+      if (response.data.text.length) {
+
+        // pino.info(`Got non-empty response back from Whisper."`)
+        triggerScoring(fpath, clientName, response.data.text)
+      } else {
+
+        pino.info(`Got back zero-length output from Whisper.`)
+      }
+    } catch (error) {
+
+      pino.error(`Error from openai (Whisper): ${error.message}`)
+    }
+  }
+}
+
+const removePunctuation = (text) => {
+
+  var punctuation = /[\.,?!]/g;
+  var newText = text.replace(punctuation, "");
+  return newText;
+}
+
+(async () => {
 
   try {
 
@@ -177,6 +229,7 @@ const triggerScoring = async (fpath, clientName, recog) => {
     app.use(cors());
     app.use(Express.json());
 
+    initializeCronJob();
     initializeWatcher();
 
     app.post('/addClientDir', async (req, res) => {
@@ -190,7 +243,7 @@ const triggerScoring = async (fpath, clientName, recog) => {
         res.json({
 
           success: true,
-          payload: {added: req.query.clientName}
+          payload: { added: req.query.clientName }
         })
       } catch (x) {
 
@@ -216,7 +269,7 @@ const triggerScoring = async (fpath, clientName, recog) => {
         res.json({
 
           success: true,
-          payload: {removed: req.body.clientName}
+          payload: { removed: req.body.clientName }
         })
       } catch (x) {
 
