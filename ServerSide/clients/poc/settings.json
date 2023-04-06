@@ -2,6 +2,6 @@
   "version": 110,
   "clientName": "P.O.C.",
   "email": "joe@poc.com",
-  "good_words": ["recheck","your","bill"],
+  "good_words": ["recheck","your","bill","literally"],
   "bad_words": ["idiot","dummy","Joan"]
 }

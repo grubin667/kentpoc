@@ -8,7 +8,7 @@ require('dotenv').config();
 const path = require('path');
 const Express = require('express');
 const fs = require('fs');
-const exec = require('child_process').exec;
+const { spawn } = require('node:child_process');
 const cors = require('cors');
 
 const cron = require('node-cron');
@@ -25,16 +25,52 @@ const port = 8201;
 let readyToProcess = false;
 let watcher = null
 
-// When a client is added, we do the following:
-// 1. Create a folder named for the client under ServerSide/clients. The folder will contain
-//    two folders (/new and /processed) and a file called settings.json. settings.json must contain
-//    at least three properties: good_words, bad_words and email. *_words are either an array of words or a comma-sep
-//    string of words. email is where we send activity reports.
-// 2. A client, however, isn't truly active until we receive a message to /addClientDir?clientName. "Add" here
-//    means add clientName to the set of clients for whom we're scanning for files. Once a client is
-//    active, that state must survive restarts, etc. until a message to /removeClientDir?clientName
-//    is received.
-let activeClients = []
+let activeClients = [];
+
+const sendMsgToFilesCom = (mtype) => {
+  // Here's how we'll use files-cli.
+  // At startup: files-cli config set --subdomain independentcall --username jerry@rubintech.com
+  //     There is no response to handle
+  // Then: files-cli login
+  //     may get 3 messages back: Subdomain, Username and Password.
+
+  try {
+
+    let filesComCommand
+    switch (mtype) {
+  
+      case 'setconfig':
+  
+        const setConfig = spawn('files-cli', ['config', 'set', '--subdomain', 'independentcall', '--username', 'jerry@rubintech.com']);
+        setConfig.stdout.on('data', (data) => {
+          console.log(`stdout: ${data}`);
+        });
+        setConfig.stderr.on('data', (data) => {
+          console.log(`stderr: ${data}`);
+        });
+        setConfig.on('close', (code) => {
+          console.log(`setconfig child process exited with code ${code}`);
+          sendMsgToFilesCom('login');
+        });
+        break;
+      case 'login':
+        const login = spawn('files-cli', ['login']);
+        login.stdout.on('data', (data) => {
+          console.log(`stdout: ${data}`);
+        });
+        login.stderr.on('data', (data) => {
+          console.log(`stderr: ${data}`);
+        });
+        login.on('close', (code) => {
+          console.log(`login child process exited with code ${code}`);
+          // sendMsgToFilesCom('login');
+        });
+        break;
+    }
+  } catch (err) {
+
+  }
+}
 
 const initializeCronJob = () => {
 
@@ -64,7 +100,7 @@ const initializeCronJob = () => {
 
           filesComCommand = `"files-cli config set --subdomain independentcall --username jerry@rubintech.com"`
         }
-        exec(filesComCommand, {}, (error, stdout, stderr) => {
+        exec(filesComCommand, (error, stdout, stderr) => {
 
           if (error) {
 
@@ -122,6 +158,7 @@ const initializeWatcher = () => {
       pino.error(`Skipping ${path}. It has non-audio extension "${ext}".`)
     } else {
 
+      pino.info(`Sending ${path} to be processed.`)
       triggerWhisper(path, clientName, filename, ext)
     }
   })
@@ -131,8 +168,18 @@ const initializeWatcher = () => {
 
 const addClientDir = (clientName) => {
 
+  // When a client is added, we do the following:
+  // 1. Create a folder named for the client under ServerSide/clients. The folder will contain
+  //    two folders (/new and /processed) and a file called settings.json. settings.json must contain
+  //    at least three properties: good_words, bad_words and email. *_words are either an array of words or a comma-sep
+  //    string of words. email is where we send activity reports.
+  // 2. A client, however, isn't truly active until we receive a message to /addClientDir?clientName. "Add" here
+  //    means add clientName to the set of clients for whom we're scanning for files. Once a client is
+  //    active, that state must survive restarts, etc. until a message to /removeClientDir?clientName
+  //    is received.
+
   // pino.info('-------------------------------------------');
-  // pino.info(`Adding ${clientName}/new`)
+  pino.info(`Adding client to watch: ${clientName}; good words add 1. bad words subtract 0.5.`)
   watcher.add(`${clientName}/new`);
 
   // Read client's settings.json.
@@ -171,9 +218,8 @@ const triggerScoring = async (fpath, clientName, recog) => {
     if (bad_words.includes(word)) bad_score++
   }
 
-  pino.info(`goods add 1. bads subtract 0.5.`)
   const score = good_score - (bad_score / 2);
-  pino.info(`Good: ${good_score}    Bad: ${bad_score}    Score: ${score}`)
+  pino.info(`[${fpath}] Good: ${good_score}    Bad: ${bad_score}    Score: ${score}    [${recog}]`)
 }
 
 const triggerWhisper = async (fpath, clientName, filename, ext) => {
@@ -229,7 +275,8 @@ const removePunctuation = (text) => {
     app.use(cors());
     app.use(Express.json());
 
-    initializeCronJob();
+    // let msgResult = sendMsgToFilesCom('setconfig');
+    // initializeCronJob();
     initializeWatcher();
 
     app.post('/addClientDir', async (req, res) => {
