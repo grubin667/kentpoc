@@ -11,7 +11,7 @@ const MockItem = ({ text }) => {
   return (
     <Card css={{ h: "$24", $$cardColor: '$colors$primary' }}>
       <Card.Body>
-        <Button>
+        <Button size="xl">
           {/* <Text h6 size={15} color="white" css={{ mt: 0 }}> */}
             {text}
           {/* </Text> */}
